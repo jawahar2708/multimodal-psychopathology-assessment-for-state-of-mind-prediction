@@ -93,9 +93,22 @@ def preprocess_for_emotion_legacy(y, sr):
 
 def process_audio(file_path, model, classes, model_type, num_speakers=2):
     try:
-        y, sr = librosa.load(file_path, sr=SAMPLE_RATE)
+        # Explicitly extract audio to a temporary wav file for robust loading from video files
+        import subprocess
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
+            tmp_wav_path = tmp_wav.name
+        
+        # Use ffmpeg to extract audio. If it's already an audio file, it just converts it.
+        subprocess.run(
+            ['ffmpeg', '-i', file_path, '-vn', '-acodec', 'pcm_s16le', '-ar', str(SAMPLE_RATE), '-ac', '1', tmp_wav_path, '-y'],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        
+        y, sr = librosa.load(tmp_wav_path, sr=SAMPLE_RATE)
+        os.remove(tmp_wav_path)
     except Exception as e:
-        st.warning(f"Could not extract audio (likely missing ffmpeg): {e}")
+        st.warning(f"Could not extract audio (likely missing ffmpeg or corrupted file): {e}")
         return pd.DataFrame()
 
     intervals = librosa.effects.split(y, top_db=25, frame_length=2048, hop_length=512)
